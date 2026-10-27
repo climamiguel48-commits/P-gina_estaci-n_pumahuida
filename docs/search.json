@@ -1,0 +1,30 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Estación meteorológica Pumahuida",
+    "section": "",
+    "text": "MONITOREO METEOROLÓGICO\n\n\nVisualización simple de las condiciones registradas en la parcela CAE-2."
+  },
+  {
+    "objectID": "index.html#series-de-las-variables",
+    "href": "index.html#series-de-las-variables",
+    "title": "Estación meteorológica Pumahuida",
+    "section": "Series de las variables",
+    "text": "Series de las variables\n\nVariable: selecciónala en el menú superior. Período: usa los botones 7 d, 30 d, 6 m o Todo. La precipitación se presenta como total diario en barras."
+  },
+  {
+    "objectID": "index.html#totales-y-resúmenes-semanales",
+    "href": "index.html#totales-y-resúmenes-semanales",
+    "title": "Estación meteorológica Pumahuida",
+    "section": "Totales y resúmenes semanales",
+    "text": "Totales y resúmenes semanales\n\nLas variables acumulativas se totalizan por semana; las variables continuas se resumen con su promedio. La precipitación se muestra en barras."
+  },
+  {
+    "objectID": "index.html#totales-y-resúmenes-mensuales",
+    "href": "index.html#totales-y-resúmenes-mensuales",
+    "title": "Estación meteorológica Pumahuida",
+    "section": "Totales y resúmenes mensuales",
+    "text": "Totales y resúmenes mensuales\n\nSe aplica el mismo criterio de agregación a escala mensual para facilitar la comparación entre períodos.\n\n\n\n\n\n\n\n\n\n\nEl último período semanal o mensual puede estar incompleto si la base termina antes del cierre del período."
+  }
+]

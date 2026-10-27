@@ -1,0 +1,198 @@
+:root {
+  --forest: #285943;
+  --forest-dark: #1d4332;
+  --sage: #dfeae4;
+  --sage-light: #f1f6f3;
+  --ink: #17221d;
+  --muted: #68756e;
+  --line: #dbe4df;
+  --surface: #ffffff;
+  --page: #f5f8f6;
+  --shadow: 0 10px 30px rgba(31, 70, 52, 0.07);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(circle at top right, rgba(92, 137, 112, 0.10), transparent 32rem),
+    var(--page);
+  color: var(--ink);
+  font-family: "Segoe UI", Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+#quarto-content {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding-top: 0.6rem;
+}
+
+.quarto-title-block {
+  margin: 0 0 0.7rem 0;
+  padding: 1.5rem 0 0.5rem 0;
+}
+
+.quarto-title h1,
+.title {
+  color: var(--forest-dark);
+  font-weight: 760;
+  letter-spacing: -0.025em;
+  font-size: clamp(2rem, 4vw, 3rem);
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.hero-intro {
+  background: linear-gradient(120deg, var(--forest-dark), var(--forest));
+  color: white;
+  border-radius: 18px;
+  padding: 1.25rem 1.4rem;
+  margin: 0.75rem 0 1.15rem 0;
+  box-shadow: var(--shadow);
+}
+
+.hero-kicker {
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.13em;
+  opacity: 0.78;
+  margin-bottom: 0.3rem;
+}
+
+.hero-text {
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  line-height: 1.45;
+  max-width: 760px;
+}
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 1.4rem;
+  margin: 0.1rem 0 2rem 0;
+  padding: 0.15rem 0.2rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.status-strip span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.status-strip span + span::before {
+  content: "•";
+  color: #9aaba2;
+  margin-right: 0.8rem;
+}
+
+.status-strip b {
+  color: var(--forest-dark);
+  font-weight: 700;
+}
+
+h2 {
+  color: var(--forest-dark);
+  font-size: 1.45rem;
+  font-weight: 730;
+  letter-spacing: -0.015em;
+  margin-top: 2.4rem;
+  margin-bottom: 0.35rem;
+  border: 0;
+  padding: 0;
+}
+
+h2::after {
+  content: "";
+  display: block;
+  width: 44px;
+  height: 3px;
+  background: var(--forest);
+  border-radius: 10px;
+  margin-top: 0.45rem;
+}
+
+.section-note {
+  color: var(--muted);
+  font-size: 0.93rem;
+  line-height: 1.55;
+  margin: 0.75rem 0 0.85rem 0;
+}
+
+.chart-card {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 0.4rem 0.55rem 0.2rem 0.55rem;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.html-widget {
+  width: 100% !important;
+}
+
+.plotly.html-widget {
+  min-height: 510px;
+  width: 100% !important;
+}
+
+.data-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 1.2rem 0 2rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--sage);
+}
+
+.nav-footer {
+  background: transparent !important;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 800px) {
+  .status-strip {
+    gap: 0.4rem 0.9rem;
+    font-size: 0.84rem;
+  }
+
+  .status-strip span {
+    white-space: normal;
+  }
+
+  .status-strip span + span::before {
+    margin-right: 0.45rem;
+  }
+
+  #quarto-content {
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+
+  .hero-intro {
+    border-radius: 14px;
+    padding: 1rem;
+  }
+
+  .chart-card {
+    border-radius: 14px;
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+  }
+
+  .plotly.html-widget {
+    min-height: 440px;
+  }
+}

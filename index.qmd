@@ -1,0 +1,368 @@
+---
+title: "Estación meteorológica Pumahuida"
+subtitle: "Parcela CAE-2"
+---
+
+```{r setup}
+source("scripts/preparar_datos.R")
+
+library(plotly)
+library(dplyr)
+
+fmt_fecha <- function(x, con_hora = FALSE) {
+  if (con_hora) {
+    format(x, "%d-%m-%Y %H:%M")
+  } else {
+    format(x, "%d-%m-%Y")
+  }
+}
+
+es_precipitacion <- function(variable) {
+  identical(variable, "Rain_mm_Tot")
+}
+
+# Serie temporal interactiva con selector de variable.
+# La precipitación se representa con barras; el resto, con líneas.
+grafico_series <- function(datos, catalogo, precipitacion_diaria) {
+  p <- plot_ly()
+
+  for (i in seq_len(nrow(catalogo))) {
+    var <- catalogo$variable[i]
+    etiqueta <- catalogo$nombre[i]
+    unidad <- catalogo$unidad[i]
+
+    if (es_precipitacion(var)) {
+      # La lluvia se muestra como TOTAL DIARIO.
+      # Esto evita cientos de barras horarias muy pequeñas y facilita
+      # identificar claramente qué día ocurrió cada evento.
+      p <- p %>%
+        add_bars(
+          data = precipitacion_diaria,
+          x = ~fecha,
+          y = ~valor,
+          name = etiqueta,
+          visible = i == 1,
+          width = 0.82 * 24 * 60 * 60 * 1000,
+          marker = list(
+            color = "#4d7f66",
+            line = list(width = 0)
+          ),
+          hovertemplate = paste0(
+            "%{x|%d-%m-%Y}<br>",
+            "Precipitación diaria: %{y:.2f} mm",
+            "<extra></extra>"
+          )
+        )
+    } else {
+      p <- p %>%
+        add_trace(
+          x = datos$fecha_hora,
+          y = datos[[var]],
+          type = "scattergl",
+          mode = "lines",
+          name = etiqueta,
+          visible = i == 1,
+          line = list(width = 1.25),
+          hovertemplate = paste0(
+            "%{x|%d-%m-%Y %H:%M}<br>",
+            etiqueta, ": %{y:.3f} ", unidad,
+            "<extra></extra>"
+          )
+        )
+    }
+  }
+
+  botones <- lapply(seq_len(nrow(catalogo)), function(i) {
+    visibles <- rep(FALSE, nrow(catalogo))
+    visibles[i] <- TRUE
+
+    list(
+      method = "update",
+      label = catalogo$nombre[i],
+      args = list(
+        list(visible = visibles),
+        list(
+          yaxis = list(
+            title = paste0(catalogo$nombre[i], " (", catalogo$unidad[i], ")"),
+            autorange = TRUE
+          )
+        )
+      )
+    )
+  })
+
+  # Vista inicial: últimos 30 días para que el día exacto sea legible.
+  # El botón "Todo" mantiene disponible el historial completo.
+  fecha_fin <- max(datos$fecha_hora, na.rm = TRUE)
+  fecha_inicio <- max(min(datos$fecha_hora, na.rm = TRUE), fecha_fin - lubridate::days(30))
+
+  p %>%
+    layout(
+      margin = list(l = 70, r = 24, t = 132, b = 95),
+      showlegend = FALSE,
+      bargap = 0.05,
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      xaxis = list(
+        title = "Fecha",
+        type = "date",
+        range = list(fecha_inicio, fecha_fin),
+        tickformat = "%d-%m-%Y",
+        hoverformat = "%d-%m-%Y %H:%M",
+        tickangle = -35,
+        nticks = 11,
+        automargin = TRUE,
+        gridcolor = "#e8eeea",
+        zeroline = FALSE,
+        rangeslider = list(visible = TRUE, thickness = 0.08),
+        rangeselector = list(
+          x = 0,
+          y = 1.12,
+          xanchor = "left",
+          yanchor = "top",
+          bgcolor = "#f4f7f5",
+          activecolor = "#dce9e1",
+          bordercolor = "#d7e1db",
+          borderwidth = 1,
+          buttons = list(
+            list(count = 7, label = "7 d", step = "day", stepmode = "backward"),
+            list(count = 30, label = "30 d", step = "day", stepmode = "backward"),
+            list(count = 6, label = "6 m", step = "month", stepmode = "backward"),
+            list(step = "all", label = "Todo")
+          )
+        )
+      ),
+      yaxis = list(
+        title = paste0(catalogo$nombre[1], " (", catalogo$unidad[1], ")"),
+        gridcolor = "#e8eeea",
+        zerolinecolor = "#d8e1dc",
+        automargin = TRUE
+      ),
+      updatemenus = list(
+        list(
+          type = "dropdown",
+          x = 0,
+          y = 1.30,
+          xanchor = "left",
+          yanchor = "top",
+          bgcolor = "white",
+          bordercolor = "#d7e1db",
+          buttons = botones,
+          direction = "down"
+        )
+      )
+    ) %>%
+    config(
+      displaylogo = FALSE,
+      responsive = TRUE,
+      locale = "es",
+      modeBarButtonsToRemove = c("lasso2d", "select2d")
+    )
+}
+
+# Resumen semanal/mensual con el mismo selector.
+# Precipitación se representa como barras.
+grafico_resumen <- function(resumen, catalogo, escala = c("semanal", "mensual")) {
+  escala <- match.arg(escala)
+  p <- plot_ly()
+
+  for (i in seq_len(nrow(catalogo))) {
+    var <- catalogo$variable[i]
+    d <- resumen %>% filter(variable == var)
+    etiqueta <- catalogo$nombre[i]
+    unidad <- catalogo$unidad[i]
+
+    if (es_precipitacion(var)) {
+      ancho_barra <- if (escala == "semanal") {
+        5.5 * 24 * 60 * 60 * 1000
+      } else {
+        20 * 24 * 60 * 60 * 1000
+      }
+
+      texto_barra <- if (escala == "mensual") {
+        ifelse(d$valor > 0, sprintf("%.1f", d$valor), "")
+      } else {
+        rep("", nrow(d))
+      }
+
+      p <- p %>%
+        add_bars(
+          data = d,
+          x = ~periodo,
+          y = ~valor,
+          name = etiqueta,
+          visible = i == 1,
+          width = ancho_barra,
+          text = texto_barra,
+          textposition = if (escala == "mensual") "outside" else "none",
+          cliponaxis = FALSE,
+          marker = list(
+            color = "#4d7f66",
+            line = list(width = 0)
+          ),
+          hovertemplate = paste0(
+            "%{x|%d-%m-%Y}<br>",
+            "Precipitación total: %{y:.2f} mm",
+            "<extra></extra>"
+          )
+        )
+    } else {
+      p <- p %>%
+        add_trace(
+          data = d,
+          x = ~periodo,
+          y = ~valor,
+          type = "scatter",
+          mode = "lines+markers",
+          name = etiqueta,
+          visible = i == 1,
+          line = list(width = 1.8),
+          marker = list(size = 5),
+          hovertemplate = paste0(
+            "%{x|%d-%m-%Y}<br>",
+            etiqueta, ": %{y:.3f} ", unidad,
+            "<extra></extra>"
+          )
+        )
+    }
+  }
+
+  botones <- lapply(seq_len(nrow(catalogo)), function(i) {
+    visibles <- rep(FALSE, nrow(catalogo))
+    visibles[i] <- TRUE
+
+    metodo <- switch(
+      catalogo$agregacion[i],
+      sum = "Total",
+      max = "Máximo",
+      circular = "Media circular",
+      "Promedio"
+    )
+
+    list(
+      method = "update",
+      label = catalogo$nombre[i],
+      args = list(
+        list(visible = visibles),
+        list(
+          yaxis = list(
+            title = paste0(metodo, " · ", catalogo$unidad[i]),
+            autorange = TRUE
+          )
+        )
+      )
+    )
+  })
+
+  metodo_inicial <- switch(
+    catalogo$agregacion[1],
+    sum = "Total",
+    max = "Máximo",
+    circular = "Media circular",
+    "Promedio"
+  )
+
+  # Fechas exactas en formato dd-mm-aaaa. Para el resumen semanal
+  # se muestran unas 12 marcas para evitar superposición; en el mensual,
+  # todos los inicios de mes quedan identificados por su fecha completa.
+  fechas <- sort(unique(as.Date(resumen$periodo)))
+  n_max <- if (escala == "semanal") 12 else length(fechas)
+  idx <- if (length(fechas) <= n_max) {
+    seq_along(fechas)
+  } else {
+    unique(round(seq(1, length(fechas), length.out = n_max)))
+  }
+  fechas_ticks <- fechas[idx]
+
+  p %>%
+    layout(
+      margin = list(l = 70, r = 32, t = 112, b = 100),
+      showlegend = FALSE,
+      bargap = if (escala == "mensual") 0.18 else 0.10,
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      xaxis = list(
+        title = NULL,
+        type = "date",
+        tickmode = "array",
+        tickvals = fechas_ticks,
+        ticktext = format(fechas_ticks, "%d-%m-%Y"),
+        tickangle = -40,
+        automargin = TRUE,
+        gridcolor = "#eef2ef",
+        zeroline = FALSE
+      ),
+      yaxis = list(
+        title = paste0(metodo_inicial, " · ", catalogo$unidad[1]),
+        gridcolor = "#e8eeea",
+        zerolinecolor = "#d8e1dc",
+        automargin = TRUE
+      ),
+      updatemenus = list(
+        list(
+          type = "dropdown",
+          x = 0,
+          y = 1.20,
+          xanchor = "left",
+          yanchor = "top",
+          bgcolor = "white",
+          bordercolor = "#d7e1db",
+          buttons = botones
+        )
+      )
+    ) %>%
+    config(
+      displaylogo = FALSE,
+      responsive = TRUE,
+      locale = "es",
+      modeBarButtonsToRemove = c("lasso2d", "select2d")
+    )
+}
+```
+
+<div class="hero-intro">
+  <div class="hero-kicker">MONITOREO METEOROLÓGICO</div>
+  <div class="hero-text">Visualización simple de las condiciones registradas en la parcela CAE-2.</div>
+</div>
+
+```{r status, results='asis'}
+cat(sprintf(
+  '<div class="status-strip"><span><b>Período:</b> %s – %s</span><span><b>Último registro:</b> %s</span><span><b>Registros:</b> %s</span></div>',
+  fmt_fecha(fecha_min),
+  fmt_fecha(fecha_max),
+  fmt_fecha(fecha_max, TRUE),
+  format(n_registros, big.mark = ".", scientific = FALSE)
+))
+```
+
+## Series de las variables
+
+<div class="section-note"><strong>Variable:</strong> selecciónala en el menú superior. <strong>Período:</strong> usa los botones <strong>7 d</strong>, <strong>30 d</strong>, <strong>6 m</strong> o <strong>Todo</strong>. La precipitación se presenta como <strong>total diario en barras</strong>.</div>
+
+::: {.chart-card}
+```{r}
+grafico_series(datos, catalogo, precipitacion_diaria)
+```
+:::
+
+## Totales y resúmenes semanales
+
+<div class="section-note">Las variables acumulativas se totalizan por semana; las variables continuas se resumen con su promedio. La precipitación se muestra en barras.</div>
+
+::: {.chart-card}
+```{r}
+grafico_resumen(resumen_semanal, catalogo, "semanal")
+```
+:::
+
+## Totales y resúmenes mensuales
+
+<div class="section-note">Se aplica el mismo criterio de agregación a escala mensual para facilitar la comparación entre períodos.</div>
+
+::: {.chart-card}
+```{r}
+grafico_resumen(resumen_mensual, catalogo, "mensual")
+```
+:::
+
+<p class="data-note">El último período semanal o mensual puede estar incompleto si la base termina antes del cierre del período.</p>

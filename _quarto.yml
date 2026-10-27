@@ -1,0 +1,25 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "Estación meteorológica Pumahuida"
+  navbar: false
+  page-footer:
+    center: "Parcela CAE-2 · Vivero Pumahuida"
+
+lang: es
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: false
+    page-layout: full
+    smooth-scroll: true
+
+execute:
+  echo: false
+  warning: false
+  message: false
+  cache: false
