@@ -21,8 +21,155 @@ es_precipitacion <- function(variable) {
   identical(variable, "Rain_mm_Tot")
 }
 
-# Serie temporal interactiva con selector de variable.
-# La precipitación se representa con barras; el resto, con líneas.
+# Convierte el gráfico Plotly en un widget con controles HTML propios.
+# Esto evita depender de los menus internos de Plotly, que en pantallas
+# angostas pueden quedar ocultos o ser difíciles de usar con el dedo.
+agregar_controles_meteo <- function(p, catalogo, tipo = c("serie", "resumen"),
+                                    fecha_min_js = NULL, fecha_max_js = NULL) {
+  tipo <- match.arg(tipo)
+
+  info_variables <- lapply(seq_len(nrow(catalogo)), function(i) {
+    metodo <- switch(
+      catalogo$agregacion[i],
+      sum = "Total",
+      max = "Máximo",
+      circular = "Media circular",
+      "Promedio"
+    )
+
+    list(
+      label = catalogo$nombre[i],
+      unidad = catalogo$unidad[i],
+      eje_serie = paste0(catalogo$nombre[i], " (", catalogo$unidad[i], ")"),
+      eje_resumen = paste0(metodo, " · ", catalogo$unidad[i])
+    )
+  })
+
+  datos_js <- list(
+    tipo = tipo,
+    variables = info_variables,
+    fechaMin = fecha_min_js,
+    fechaMax = fecha_max_js
+  )
+
+  htmlwidgets::onRender(
+    p,
+    "function(el, x, data) {
+      var parent = el.parentNode;
+      if (!parent) return;
+
+      var old = parent.querySelector('.meteo-controls[data-for=' + el.id + ']');
+      if (old) old.remove();
+
+      var controls = document.createElement('div');
+      controls.className = 'meteo-controls';
+      controls.setAttribute('data-for', el.id);
+
+      var selectWrap = document.createElement('label');
+      selectWrap.className = 'meteo-variable-wrap';
+
+      var selectLabel = document.createElement('span');
+      selectLabel.className = 'meteo-control-label';
+      selectLabel.textContent = 'Variable';
+
+      var select = document.createElement('select');
+      select.className = 'meteo-variable-select';
+      select.setAttribute('aria-label', 'Seleccionar variable meteorológica');
+
+      data.variables.forEach(function(v, i) {
+        var opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = v.label;
+        select.appendChild(opt);
+      });
+
+      selectWrap.appendChild(selectLabel);
+      selectWrap.appendChild(select);
+      controls.appendChild(selectWrap);
+
+      if (data.tipo === 'serie') {
+        var rangeWrap = document.createElement('div');
+        rangeWrap.className = 'meteo-range-wrap';
+
+        var rangeLabel = document.createElement('span');
+        rangeLabel.className = 'meteo-control-label';
+        rangeLabel.textContent = 'Período';
+        rangeWrap.appendChild(rangeLabel);
+
+        var btnRow = document.createElement('div');
+        btnRow.className = 'meteo-range-buttons';
+
+        [
+          {label: '7 d', kind: 'days', value: 7},
+          {label: '30 d', kind: 'days', value: 30, active: true},
+          {label: '6 m', kind: 'months', value: 6},
+          {label: 'Todo', kind: 'all', value: 0}
+        ].forEach(function(spec) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'meteo-range-btn' + (spec.active ? ' active' : '');
+          b.textContent = spec.label;
+          b.dataset.kind = spec.kind;
+          b.dataset.value = spec.value;
+
+          b.addEventListener('click', function() {
+            btnRow.querySelectorAll('.meteo-range-btn').forEach(function(z) {
+              z.classList.remove('active');
+            });
+            b.classList.add('active');
+
+            if (spec.kind === 'all') {
+              Plotly.relayout(el, {'xaxis.autorange': true});
+              return;
+            }
+
+            var end = new Date(data.fechaMax);
+            var start = new Date(end.getTime());
+
+            if (spec.kind === 'days') {
+              start.setDate(start.getDate() - spec.value);
+            } else if (spec.kind === 'months') {
+              start.setMonth(start.getMonth() - spec.value);
+            }
+
+            Plotly.relayout(el, {
+              'xaxis.autorange': false,
+              'xaxis.range': [start.toISOString(), end.toISOString()]
+            });
+          });
+
+          btnRow.appendChild(b);
+        });
+
+        rangeWrap.appendChild(btnRow);
+        controls.appendChild(rangeWrap);
+      }
+
+      parent.insertBefore(controls, el);
+
+      select.addEventListener('change', function() {
+        var idx = Number(select.value);
+
+        Plotly.restyle(el, {visible: false});
+        Plotly.restyle(el, {visible: true}, [idx]);
+
+        var titulo = data.tipo === 'serie'
+          ? data.variables[idx].eje_serie
+          : data.variables[idx].eje_resumen;
+
+        Plotly.relayout(el, {
+          'yaxis.title.text': titulo,
+          'yaxis.autorange': true
+        });
+      });
+    }",
+    data = datos_js
+  )
+}
+
+# Serie temporal interactiva.
+# La precipitación se representa como TOTAL DIARIO en barras;
+# el resto de las variables, como líneas horarias.
 grafico_series <- function(datos, catalogo, precipitacion_diaria) {
   p <- plot_ly()
 
@@ -32,9 +179,6 @@ grafico_series <- function(datos, catalogo, precipitacion_diaria) {
     unidad <- catalogo$unidad[i]
 
     if (es_precipitacion(var)) {
-      # La lluvia se muestra como TOTAL DIARIO.
-      # Esto evita cientos de barras horarias muy pequeñas y facilita
-      # identificar claramente qué día ocurrió cada evento.
       p <- p %>%
         add_bars(
           data = precipitacion_diaria,
@@ -72,96 +216,57 @@ grafico_series <- function(datos, catalogo, precipitacion_diaria) {
     }
   }
 
-  botones <- lapply(seq_len(nrow(catalogo)), function(i) {
-    visibles <- rep(FALSE, nrow(catalogo))
-    visibles[i] <- TRUE
-
-    list(
-      method = "update",
-      label = catalogo$nombre[i],
-      args = list(
-        list(visible = visibles),
-        list(
-          yaxis = list(
-            title = paste0(catalogo$nombre[i], " (", catalogo$unidad[i], ")"),
-            autorange = TRUE
-          )
-        )
-      )
-    )
-  })
-
-  # Vista inicial: últimos 30 días para que el día exacto sea legible.
-  # El botón "Todo" mantiene disponible el historial completo.
   fecha_fin <- max(datos$fecha_hora, na.rm = TRUE)
-  fecha_inicio <- max(min(datos$fecha_hora, na.rm = TRUE), fecha_fin - lubridate::days(30))
+  fecha_inicio <- max(
+    min(datos$fecha_hora, na.rm = TRUE),
+    fecha_fin - lubridate::days(30)
+  )
 
-  p %>%
+  p <- p %>%
     layout(
-      margin = list(l = 70, r = 24, t = 132, b = 95),
+      margin = list(l = 64, r = 20, t = 24, b = 92),
       showlegend = FALSE,
       bargap = 0.05,
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
       xaxis = list(
-        title = "Fecha",
+        title = NULL,
         type = "date",
         range = list(fecha_inicio, fecha_fin),
         tickformat = "%d-%m-%Y",
         hoverformat = "%d-%m-%Y %H:%M",
-        tickangle = -35,
-        nticks = 11,
+        tickangle = -40,
+        nticks = 8,
         automargin = TRUE,
         gridcolor = "#e8eeea",
         zeroline = FALSE,
-        rangeslider = list(visible = TRUE, thickness = 0.08),
-        rangeselector = list(
-          x = 0,
-          y = 1.12,
-          xanchor = "left",
-          yanchor = "top",
-          bgcolor = "#f4f7f5",
-          activecolor = "#dce9e1",
-          bordercolor = "#d7e1db",
-          borderwidth = 1,
-          buttons = list(
-            list(count = 7, label = "7 d", step = "day", stepmode = "backward"),
-            list(count = 30, label = "30 d", step = "day", stepmode = "backward"),
-            list(count = 6, label = "6 m", step = "month", stepmode = "backward"),
-            list(step = "all", label = "Todo")
-          )
-        )
+        rangeslider = list(visible = FALSE)
       ),
       yaxis = list(
         title = paste0(catalogo$nombre[1], " (", catalogo$unidad[1], ")"),
         gridcolor = "#e8eeea",
         zerolinecolor = "#d8e1dc",
         automargin = TRUE
-      ),
-      updatemenus = list(
-        list(
-          type = "dropdown",
-          x = 0,
-          y = 1.30,
-          xanchor = "left",
-          yanchor = "top",
-          bgcolor = "white",
-          bordercolor = "#d7e1db",
-          buttons = botones,
-          direction = "down"
-        )
       )
     ) %>%
     config(
       displaylogo = FALSE,
       responsive = TRUE,
       locale = "es",
-      modeBarButtonsToRemove = c("lasso2d", "select2d")
+      displayModeBar = FALSE
     )
+
+  agregar_controles_meteo(
+    p,
+    catalogo,
+    tipo = "serie",
+    fecha_min_js = format(min(datos$fecha_hora, na.rm = TRUE), "%Y-%m-%dT%H:%M:%S"),
+    fecha_max_js = format(max(datos$fecha_hora, na.rm = TRUE), "%Y-%m-%dT%H:%M:%S")
+  )
 }
 
-# Resumen semanal/mensual con el mismo selector.
-# Precipitación se representa como barras.
+# Resumen semanal/mensual con selector HTML externo.
+# La precipitación se representa como barras.
 grafico_resumen <- function(resumen, catalogo, escala = c("semanal", "mensual")) {
   escala <- match.arg(escala)
   p <- plot_ly()
@@ -227,33 +332,6 @@ grafico_resumen <- function(resumen, catalogo, escala = c("semanal", "mensual"))
     }
   }
 
-  botones <- lapply(seq_len(nrow(catalogo)), function(i) {
-    visibles <- rep(FALSE, nrow(catalogo))
-    visibles[i] <- TRUE
-
-    metodo <- switch(
-      catalogo$agregacion[i],
-      sum = "Total",
-      max = "Máximo",
-      circular = "Media circular",
-      "Promedio"
-    )
-
-    list(
-      method = "update",
-      label = catalogo$nombre[i],
-      args = list(
-        list(visible = visibles),
-        list(
-          yaxis = list(
-            title = paste0(metodo, " · ", catalogo$unidad[i]),
-            autorange = TRUE
-          )
-        )
-      )
-    )
-  })
-
   metodo_inicial <- switch(
     catalogo$agregacion[1],
     sum = "Total",
@@ -262,11 +340,8 @@ grafico_resumen <- function(resumen, catalogo, escala = c("semanal", "mensual"))
     "Promedio"
   )
 
-  # Fechas exactas en formato dd-mm-aaaa. Para el resumen semanal
-  # se muestran unas 12 marcas para evitar superposición; en el mensual,
-  # todos los inicios de mes quedan identificados por su fecha completa.
   fechas <- sort(unique(as.Date(resumen$periodo)))
-  n_max <- if (escala == "semanal") 12 else length(fechas)
+  n_max <- if (escala == "semanal") 10 else min(length(fechas), 12)
   idx <- if (length(fechas) <= n_max) {
     seq_along(fechas)
   } else {
@@ -274,9 +349,9 @@ grafico_resumen <- function(resumen, catalogo, escala = c("semanal", "mensual"))
   }
   fechas_ticks <- fechas[idx]
 
-  p %>%
+  p <- p %>%
     layout(
-      margin = list(l = 70, r = 32, t = 112, b = 100),
+      margin = list(l = 64, r = 26, t = 24, b = 98),
       showlegend = FALSE,
       bargap = if (escala == "mensual") 0.18 else 0.10,
       paper_bgcolor = "rgba(0,0,0,0)",
@@ -297,26 +372,20 @@ grafico_resumen <- function(resumen, catalogo, escala = c("semanal", "mensual"))
         gridcolor = "#e8eeea",
         zerolinecolor = "#d8e1dc",
         automargin = TRUE
-      ),
-      updatemenus = list(
-        list(
-          type = "dropdown",
-          x = 0,
-          y = 1.20,
-          xanchor = "left",
-          yanchor = "top",
-          bgcolor = "white",
-          bordercolor = "#d7e1db",
-          buttons = botones
-        )
       )
     ) %>%
     config(
       displaylogo = FALSE,
       responsive = TRUE,
       locale = "es",
-      modeBarButtonsToRemove = c("lasso2d", "select2d")
+      displayModeBar = FALSE
     )
+
+  agregar_controles_meteo(
+    p,
+    catalogo,
+    tipo = "resumen"
+  )
 }
 ```
 

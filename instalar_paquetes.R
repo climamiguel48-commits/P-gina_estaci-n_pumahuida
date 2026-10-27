@@ -5,7 +5,8 @@ paquetes <- c(
   "lubridate",
   "purrr",
   "tibble",
-  "plotly"
+  "plotly",
+  "htmlwidgets"
 )
 
 faltantes <- paquetes[!vapply(paquetes, requireNamespace, quietly = TRUE, FUN.VALUE = logical(1))]
